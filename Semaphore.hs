@@ -8,6 +8,7 @@ import Control.Concurrent.STM
 import Control.Monad
 import Data.Typeable
 import Control.Exception
+-- import Debug.Trace
 
 -- | 'QSem' is a quantity semaphore in which the resource is aqcuired
 -- and released in units of one. It provides guaranteed FIFO ordering
@@ -24,7 +25,7 @@ newQSem i = atomically $ do
   return (QSem q b1 b2)
 
 waitQSem :: QSem -> IO ()
-waitQSem (QSem q _b1 b2) =
+waitQSem s@(QSem q _b1 b2) =
   mask_ $ join $ atomically $ do
         -- join, because if we need to block, we have to add a TVar to
         -- the block queue.
@@ -39,14 +40,29 @@ waitQSem (QSem q _b1 b2) =
         else do writeTVar q $! v - 1
                 return (return ())
   where
-    -- careful here: if we receive an exception, then write True into
-    -- the TVar, so that a future signal won't try to wake up this
-    -- waitQSem.
+    --
+    -- very careful here: if we receive an exception, then we need to
+    --  (a) write True into the TVar, so that another signalQSem doesn't
+    --      try to wake up this thread, and
+    --  (b) if the TVar is *already* True, then we need to do another
+    --      signalQSem to avoid losing a unit of the resource.
+    --
+    -- The 'wake' function does both (a) and (b), so we can just call
+    -- it here.
+    --
     wait t =
-      flip onException (atomically $ writeTVar t True) $
+      flip onException (wake s t) $
       atomically $ do
         b <- readTVar t
         when (not b) retry
+
+{-
+ property we want:
+
+   bracket waitQSem (\_ -> signalQSem) (\_ -> ...)
+
+ never loses a unit of the resource.
+-}
 
 signalQSem :: QSem -> IO ()
 signalQSem s@(QSem q b1 b2) =
@@ -65,7 +81,7 @@ signalQSem s@(QSem q b1 b2) =
       checkwake2 ys
     checkwake1 (x:xs) = do
       writeTVar b1 xs
-      return (wake x)
+      return (wake s x)
 
     checkwake2 [] = do
       writeTVar q 1
@@ -74,9 +90,9 @@ signalQSem s@(QSem q b1 b2) =
       let (z:zs) = reverse ys
       writeTVar b1 zs
       writeTVar b2 []
-      return (wake z)
+      return (wake s z)
 
-    wake x = join $ atomically $ do
+wake s x = join $ atomically $ do
       b <- readTVar x
       if b then return (signalQSem s)
            else do writeTVar x True

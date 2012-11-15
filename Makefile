@@ -1,5 +1,7 @@
 GHC=ghc
-GHC_OPTS=-O2 -Wall
+GHC_OPTS=-O2 -Wall -threaded -rtsopts
+
+all :
 
 sembench-sem: sembench.hs Semaphore.hs
 	$(GHC) $(GHC_OPTS) $< -o $@
@@ -10,8 +12,8 @@ sembench-qsem: sembench.hs Semaphore.hs
 sembench-msem: sembench.hs Semaphore.hs
 	$(GHC) $(GHC_OPTS) -DMSEM $< -o $@
 
-.PHONY: run
-run : sembench-sem sembench-qsem sembench-msem
+.PHONY: runbench
+runbench : sembench-sem sembench-qsem sembench-msem
 	@echo ========== 0 ===========
 	@echo
 	time ./sembench-sem  0 5000000
@@ -32,3 +34,22 @@ run : sembench-sem sembench-qsem sembench-msem
 
 clean :
 	rm -f *.o *.hi sembench-*
+
+
+semtest-sem: semtest.hs Semaphore.hs
+	$(GHC) $(GHC_OPTS) $< -o $@
+
+semtest-qsem: semtest.hs Semaphore.hs
+	$(GHC) $(GHC_OPTS) -DQSEM $< -o $@
+
+semtest-msem: semtest.hs Semaphore.hs
+	$(GHC) $(GHC_OPTS) -DMSEM $< -o $@
+
+
+.PHONY: runtest
+runtest : semtest-sem semtest-qsem semtest-msem
+	@echo ============== tests =============
+	-./semtest-sem
+	-./semtest-qsem
+	-./semtest-msem
+	@echo
