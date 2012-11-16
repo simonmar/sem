@@ -5,6 +5,7 @@ import Test.Framework.Providers.HUnit
 import Test.HUnit
 
 import Semaphore as S
+import Sem2 as S2
 import STM.Semaphore as SS
 import Control.Concurrent.QSem as Q
 import qualified Control.Concurrent.MSem as M
@@ -26,6 +27,10 @@ signal = SS.signalQSem
 new = M.new
 wait = M.wait
 signal = M.signal
+#elif defined (SEM2)
+new = S2.newQSem
+wait = S2.waitQSem
+signal = S2.signalQSem
 #else
 new = S.newQSem
 wait = S.waitQSem
