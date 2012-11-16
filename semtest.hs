@@ -5,6 +5,7 @@ import Test.Framework.Providers.HUnit
 import Test.HUnit
 
 import Semaphore as S
+import STM.Semaphore as SS
 import Control.Concurrent.QSem as Q
 import qualified Control.Concurrent.MSem as M
 import Control.Concurrent.Chan
@@ -17,6 +18,10 @@ import Control.Monad
 new = Q.newQSem
 wait = Q.waitQSem
 signal = Q.signalQSem
+#elif defined(SSEM)
+new = SS.newQSem
+wait = SS.waitQSem
+signal = SS.signalQSem
 #elif defined (MSEM)
 new = M.new
 wait = M.wait
