@@ -41,9 +41,9 @@ import Data.Maybe
 --
 -- The pattern
 --
--- >   bracket_ waitQSemN signalQSemN (...)
+-- >   bracket_ (waitQSemN n) (signalQSemN n) (...)
 --
--- is safe; it never loses a unit of the resource.
+-- is safe; it never loses any of the resource.
 --
 data QSemN = QSemN !(MVar (Int, [(Int, MVar ())], [(Int, MVar ())]))
   deriving Typeable
