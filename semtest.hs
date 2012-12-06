@@ -41,10 +41,26 @@ signal = M.signal
 main = defaultMain tests
 
 tests = [
+    testCase "sem1" sem1,
+    testCase "sem2" sem2,
     testCase "sem_kill" sem_kill,
     testCase "sem_fifo" sem_fifo,
     testCase "sem_bracket" sem_bracket
  ]
+
+sem1 :: Assertion
+sem1 = do
+  q <- new 0
+  signal q
+  wait q
+
+sem2 :: Assertion
+sem2 = do
+  q <- new 0
+  signal q
+  signal q
+  wait q
+  wait q
 
 sem_fifo :: Assertion
 sem_fifo = do

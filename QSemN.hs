@@ -1,7 +1,27 @@
+{-# LANGUAGE Trustworthy #-}
+{-# LANGUAGE CPP #-}
+#ifdef __GLASGOW_HASKELL__
 {-# LANGUAGE DeriveDataTypeable, BangPatterns #-}
+#endif
 {-# OPTIONS_GHC -funbox-strict-fields #-}
+
+-----------------------------------------------------------------------------
+-- |
+-- Module      :  Control.Concurrent.QSemN
+-- Copyright   :  (c) The University of Glasgow 2001
+-- License     :  BSD-style (see the file libraries/base/LICENSE)
+-- 
+-- Maintainer  :  libraries@haskell.org
+-- Stability   :  experimental
+-- Portability :  non-portable (concurrency)
+--
+-- Quantity semaphores in which each thread may wait for an arbitrary
+-- \"amount\".
+--
+-----------------------------------------------------------------------------
+
 module QSemN
-      (  -- * General Quantity Semaphores
+        (  -- * General Quantity Semaphores
           QSemN,        -- abstract
           newQSemN,     -- :: Int   -> IO QSemN
           waitQSemN,    -- :: QSemN -> Int -> IO ()
@@ -9,13 +29,11 @@ module QSemN
       ) where
 
 import Control.Concurrent ( MVar, newEmptyMVar, takeMVar, tryTakeMVar
-                          , putMVar, modifyMVar, modifyMVar_, newMVar
+                          , putMVar, newMVar
                           , tryPutMVar, isEmptyMVar)
-import Control.Monad
 import Data.Typeable
 import Control.Exception
 import Data.Maybe
-import Debug.Trace
 
 -- | 'QSemN' is a quantity semaphore in which the resource is aqcuired
 -- and released in units of one. It provides guaranteed FIFO ordering
@@ -57,25 +75,32 @@ newQSemN initial
       sem <- newMVar (initial, [], [])
       return (QSemN sem)
 
+-- |Wait for the specified quantity to become available
 waitQSemN :: QSemN -> Int -> IO ()
-waitQSemN (QSemN m) sz = do
-  mask_ $ join $ modifyMVar m $ \ (i,b1,b2) ->
-    let z = i-sz in
+waitQSemN (QSemN m) sz =
+  mask_ $ do
+    (i,b1,b2) <- takeMVar m
+    let z = i-sz
     if z < 0
        then do
          b <- newEmptyMVar
-         return ((i, b1, (sz,b):b2), wait b)
+         putMVar m (i, b1, (sz,b):b2)
+         wait b
        else do
-         return ((z, b1, b2), return ())
+         putMVar m (z, b1, b2)
+         return ()
   where
     wait b = do
-        takeMVar b `onException` (uninterruptibleMask_ $
-                (modifyMVar_ m $ \ (i,b1,b2) -> do
+        takeMVar b `onException`
+                (uninterruptibleMask_ $ do -- Note [signal uninterruptible]
+                   (i,b1,b2) <- takeMVar m
                    r <- tryTakeMVar b
-                   if isJust r
-                      then signal sz (i,b1,b2)
-                      else do putMVar b (); return (i,b1,b2)))
+                   r' <- if isJust r
+                            then signal sz (i,b1,b2)
+                            else do putMVar b (); return (i,b1,b2)
+                   putMVar m r')
 
+-- |Signal that a given quantity is now available from the 'QSemN'.
 signalQSemN :: QSemN -> Int -> IO ()
 signalQSemN (QSemN m) sz = uninterruptibleMask_ $ do
   r <- takeMVar m
@@ -86,7 +111,7 @@ signal :: Int
        -> (Int,[(Int,MVar ())],[(Int,MVar ())])
        -> IO (Int,[(Int,MVar ())],[(Int,MVar ())])
 
-signal sz (i,b1,b2) = loop (sz + i) b1 b2
+signal sz0 (i,a1,a2) = loop (sz0 + i) a1 a2
  where
    loop 0  bs b2 = return (0,  bs, b2)
    loop sz [] [] = return (sz, [], [])

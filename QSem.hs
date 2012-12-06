@@ -1,15 +1,36 @@
+{-# LANGUAGE Trustworthy #-}
+{-# LANGUAGE CPP #-}
+#ifdef __GLASGOW_HASKELL__
 {-# LANGUAGE DeriveDataTypeable, BangPatterns #-}
+#endif
 {-# OPTIONS_GHC -funbox-strict-fields #-}
-module QSem (
-    QSem, newQSem, waitQSem, signalQSem
-  ) where
 
-import Control.Concurrent (MVar, newEmptyMVar, takeMVar, tryTakeMVar, putMVar, modifyMVar, modifyMVar_, newMVar, tryPutMVar)
-import Control.Monad
-import Data.Typeable
+-----------------------------------------------------------------------------
+-- |
+-- Module      :  Control.Concurrent.QSem
+-- Copyright   :  (c) The University of Glasgow 2001
+-- License     :  BSD-style (see the file libraries/base/LICENSE)
+-- 
+-- Maintainer  :  libraries@haskell.org
+-- Stability   :  experimental
+-- Portability :  non-portable (concurrency)
+--
+-- Simple quantity semaphores.
+--
+-----------------------------------------------------------------------------
+
+module QSem
+        ( -- * Simple Quantity Semaphores
+          QSem,         -- abstract
+          newQSem,      -- :: Int  -> IO QSem
+          waitQSem,     -- :: QSem -> IO ()
+          signalQSem    -- :: QSem -> IO ()
+        ) where
+
+import Control.Concurrent ( MVar, newEmptyMVar, takeMVar, tryTakeMVar
+                          , putMVar, newMVar, tryPutMVar)
 import Control.Exception
 import Data.Maybe
--- import Debug.Trace
 
 -- | 'QSem' is a quantity semaphore in which the resource is aqcuired
 -- and released in units of one. It provides guaranteed FIFO ordering
@@ -50,16 +71,20 @@ newQSem initial
       sem <- newMVar (initial, [], [])
       return (QSem sem)
 
+-- |Wait for a unit to become available
 waitQSem :: QSem -> IO ()
-waitQSem (QSem m) = do
-  mask_ $ join $ modifyMVar m $ \ (i,b1,b2) ->
+waitQSem (QSem m) =
+  mask_ $ do
+    (i,b1,b2) <- takeMVar m
     if i == 0
        then do
          b <- newEmptyMVar
-         return ((i, b1, b:b2), wait b)
+         putMVar m (i, b1, b:b2)
+         wait b
        else do
          let !z = i-1
-         return ((z, b1, b2), return ())
+         putMVar m (z, b1, b2)
+         return ()
   where
     wait b = takeMVar b `onException` do
                 (uninterruptibleMask_ $ do -- Note [signal uninterruptible]
@@ -70,11 +95,13 @@ waitQSem (QSem m) = do
                             else do putMVar b (); return (i,b1,b2)
                    putMVar m r')
 
+-- |Signal that a unit of the 'QSem' is available
 signalQSem :: QSem -> IO ()
-signalQSem (QSem m) = uninterruptibleMask_ $ do -- Note [signal uninterruptible]
-  r <- takeMVar m
-  r' <- signal r
-  putMVar m r'
+signalQSem (QSem m) =
+  uninterruptibleMask_ $ do -- Note [signal uninterruptible]
+    r <- takeMVar m
+    r' <- signal r
+    putMVar m r'
 
 -- Note [signal uninterruptible]
 --
@@ -93,10 +120,10 @@ signalQSem (QSem m) = uninterruptibleMask_ $ do -- Note [signal uninterruptible]
 --   benchmarks.
 
 signal :: (Int,[MVar ()],[MVar ()]) -> IO (Int,[MVar ()],[MVar ()])
-signal (i,b1,b2) =
+signal (i,a1,a2) =
  if i == 0
-   then loop b1 b2
-   else let !z = i+1 in return (z, b1, b2)
+   then loop a1 a2
+   else let !z = i+1 in return (z, a1, a2)
  where
    loop [] [] = return (1, [], [])
    loop [] b2 = loop (reverse b2) []
