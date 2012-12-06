@@ -1,19 +1,29 @@
 {-# LANGUAGE CPP #-}
 module Main where
 
-import Semaphore as S
-import Sem2 as S2
+import QSem as Q
+import QSemSTM as S
 import STM.Semaphore as SS
-import Control.Concurrent.QSem as Q
+import Control.Concurrent.QSem as OldQ
 import qualified Control.Concurrent.MSem as M
+
 import Control.Monad
 import System.Environment
 import Control.Concurrent (forkIO)
 
-#ifdef QSEM
+
+#ifdef OLDQ
+new = OldQ.newQSem
+wait = OldQ.waitQSem
+signal = OldQ.signalQSem
+#elif defined (NEWQ)
 new = Q.newQSem
 wait = Q.waitQSem
 signal = Q.signalQSem
+#elif defined (NEWQS)
+new = S.newQSem
+wait = S.waitQSem
+signal = S.signalQSem
 #elif defined(SSEM)
 new = SS.newQSem
 wait = SS.waitQSem
@@ -22,14 +32,6 @@ signal = SS.signalQSem
 new = M.new
 wait = M.wait
 signal = M.signal
-#elif defined (SEM2)
-new = S2.newQSem
-wait = S2.waitQSem
-signal = S2.signalQSem
-#else
-new = S.newQSem
-wait = S.waitQSem
-signal = S.signalQSem
 #endif
 
 main = do

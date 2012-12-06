@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# OPTIONS_GHC -funbox-strict-fields #-}
-module Semaphore (
+module QSemSTM (
     QSem, newQSem, waitQSem, signalQSem
   ) where
 

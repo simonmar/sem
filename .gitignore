@@ -1,0 +1,12 @@
+*.hi
+*.o
+*~
+sembench-*
+semtest-*
+semnbench-*
+semntest-*
+*.mix
+*.tix
+hpc_*html
+*.hs.html
+
